@@ -24,9 +24,9 @@ static const uint8_t TRACK_WAVE[TRACKS] = {W_PULSE50, W_PULSE25, W_TRI, W_NOISE}
 static const uint16_t TRACK_COLOR[TRACKS] = {TFT_CYAN, TFT_GREENYELLOW, TFT_ORANGE, TFT_MAGENTA};
 static const char* NOTE_NAME[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 
-// Tracker-style layout: bottom letter row is one octave, the q row (with digits as black keys)
-// continues an octave higher.
-static const char KEYMAP[] = "zsxdcvgbhnjmq2w3er5t6y7ui9o0p";
+// GarageBand "Musical Typing" layout: the home row a..l is the white keys (C to the next D) and
+// the row above holds the black keys. The string index is the semitone above the octave's C.
+static const char KEYMAP[] = "awsedftgyhujkolp";
 static constexpr int KEYMAP_LEN = sizeof(KEYMAP) - 1;
 
 static int semitone_of(char c) {
@@ -269,40 +269,38 @@ static void draw_play() {
   c.print(WAVE_NAME[s_wave]);
   c.setTextSize(1);
 
-  // piano: 17 white keys covering the 29 mapped semitones
-  static const int WHITE_SEMI[] = {0, 2, 4, 5, 7, 9, 11};
-  const int kw = 14, top = 44, wh = 62, bh = 36;
-  int x = 1;
+  c.setTextColor(TFT_DARKGREY);
+  c.setCursor(160, 25);
+  c.print("1-4:wave");
+
+  // piano: 9 white keys covering the 16 mapped semitones, labelled with their keys
+  static const bool BLACK[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
+  const int kw = 26, top = 42, wh = 68, bh = 40;
+  c.setTextSize(2);
+  int x = 3;
   for (int s = 0; s < KEYMAP_LEN; s++) {
-    int pc = s % 12;
-    bool white = false;
-    for (int w : WHITE_SEMI) white |= (w == pc);
-    if (!white) continue;
-    bool on = semitone_held(s);
-    c.fillRect(x, top, kw - 1, wh, on ? TFT_YELLOW : TFT_WHITE);
+    if (BLACK[s % 12]) continue;
+    c.fillRect(x, top, kw - 2, wh, semitone_held(s) ? TFT_YELLOW : TFT_WHITE);
     c.setTextColor(TFT_DARKGREY);
-    c.setCursor(x + 4, top + wh - 10);
+    c.setCursor(x + 6, top + wh - 18);
     c.print(KEYMAP[s]);
     x += kw;
   }
-  x = 1;
+  x = 3;
   for (int s = 0; s < KEYMAP_LEN; s++) {
-    int pc = s % 12;
-    bool white = false;
-    for (int w : WHITE_SEMI) white |= (w == pc);
-    if (white) {
+    if (!BLACK[s % 12]) {
       x += kw;
       continue;
     }
-    int bx = x - 5;
-    bool on = semitone_held(s);
-    c.fillRect(bx, top, 9, bh, on ? TFT_ORANGE : 0x2104);
+    int bx = x - 9;
+    c.fillRect(bx, top, 16, bh, semitone_held(s) ? TFT_ORANGE : 0x2104);
     c.setTextColor(TFT_LIGHTGREY);
-    c.setCursor(bx + 2, top + bh - 10);
+    c.setCursor(bx + 2, top + bh - 18);
     c.print(KEYMAP[s]);
   }
-  draw_footer("Tab:SEQ Spc:play/stop -=:octave []:BPM",
-              "Up/Down:volume Left/Right:wave");
+  c.setTextSize(1);
+  draw_footer("Tab:SEQ Spc:play/stop zx:octave -=:vol",
+              "[]:BPM");
 }
 
 static void draw_seq() {
@@ -335,8 +333,8 @@ static void draw_seq() {
   c.setTextColor(TRACK_COLOR[s_track]);
   c.setCursor(4, top + rh * TRACKS + 6);
   c.printf("%s step %2d: %s", TRACK_NAME[s_track], s_cursor + 1, name);
-  draw_footer("Tab:PLAY Spc:play/stop -=:octave []:BPM",
-              "Arrows:move key:write Del:clear");
+  draw_footer("Tab:PLAY Spc:play/stop zx:octave -=:vol",
+              "[]:BPM Arrows:move key:write Del:clear");
 }
 
 static void draw() {
@@ -388,25 +386,24 @@ static void command(char k) {
       s_playing = !s_playing;
       send({s_playing ? Cmd::PLAY : Cmd::STOP, 0, 0, 0});
       return;
-    case '-': if (s_octave > 1) s_octave--; break;
-    case '=': if (s_octave < 6) s_octave++; break;
+    case 'z': if (s_octave > 1) s_octave--; break;
+    case 'x': if (s_octave < 6) s_octave++; break;
+    case '-': s_volume = max(0, s_volume - 16); M5.Speaker.setVolume(s_volume); break;
+    case '=': s_volume = min(255, s_volume + 16); M5.Speaker.setVolume(s_volume); break;
     case '[': s_bpm = max(60, s_bpm - 5); break;
     case ']': s_bpm = min(240, s_bpm + 5); break;
+    case '1': case '2': case '3': case '4':
+      if (s_mode != MODE_PLAY) return;  // sequencer tracks have fixed waves
+      s_wave = k - '1';
+      break;
     default:
-      if (s_mode == MODE_PLAY) {
-        if (k == ';') s_volume = min(255, s_volume + 16);
-        else if (k == '.') s_volume = max(0, s_volume - 16);
-        else if (k == ',') s_wave = (s_wave + W_COUNT - 1) % W_COUNT;
-        else if (k == '/') s_wave = (s_wave + 1) % W_COUNT;
-        else return;
-        M5.Speaker.setVolume(s_volume);
-      } else {
+      if (s_mode == MODE_SEQ) {
         if (k == ';') s_track = (s_track + TRACKS - 1) % TRACKS;
         else if (k == '.') s_track = (s_track + 1) % TRACKS;
         else if (k == ',') s_cursor = (s_cursor + STEPS - 1) % STEPS;
         else if (k == '/') s_cursor = (s_cursor + 1) % STEPS;
-        return;  // cursor moves are not saved
       }
+      return;  // cursor moves and unmapped keys are not saved
   }
   changed();
 }
