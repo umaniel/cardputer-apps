@@ -1,8 +1,9 @@
 name: build
 
-# Every push to main publishes a release whose AirPlay.bin is what
-# https://github.com/<owner>/<repo>/releases/latest/download/AirPlay.bin points to
-# (the link registered as a Launcher favorite on the Cardputer).
+# Every push to main builds every app under apps/ and publishes one release holding
+# <custom_release_name>.bin for each, so
+#   https://github.com/<owner>/<repo>/releases/latest/download/<Name>.bin
+# (the links registered as Launcher favorites on the Cardputer) always serve the newest build.
 on:
   push:
     branches: [main]
@@ -23,15 +24,24 @@ jobs:
         with:
           path: |
             ~/.platformio
-            .pio/libdeps
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+            apps/*/.pio/libdeps
+          key: pio-${{ runner.os }}-${{ hashFiles('apps/*/platformio.ini') }}
       - run: pip install platformio==6.2.0
-      - run: pio run
-      - run: cp .pio/build/cardputer-adv/firmware.bin AirPlay.bin
+      - name: Build all apps
+        run: |
+          mkdir -p dist
+          for ini in apps/*/platformio.ini; do
+            dir=$(dirname "$ini")
+            name=$(sed -n 's/^custom_release_name *= *//p' "$ini")
+            name=${name:-$(basename "$dir")}
+            pio run -d "$dir"
+            cp "$dir"/.pio/build/*/firmware.bin "dist/$name.bin"
+          done
+          ls -l dist
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
           body: ${{ github.event.head_commit.message }}
-          files: AirPlay.bin
+          files: dist/*.bin
           make_latest: true

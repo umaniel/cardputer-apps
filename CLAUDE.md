@@ -1,39 +1,42 @@
-# Cardputer AirPlay
+# Cardputer apps
 
-AirPlay 1 (RAOP) receiver for the M5Stack Cardputer ADV (ESP32-S3, 8MB flash, **no PSRAM**).
-An iPhone streams to "Cardputer"; the device shows artwork and track info and plays through its speaker.
+Apps for one M5Stack Cardputer ADV, each under `apps/<name>/` as its own PlatformIO project.
+App-specific notes live in `apps/<name>/CLAUDE.md`.
 
-## Build and release
+## Hardware: Cardputer ADV
 
-- Build: `pio run` (PlatformIO, Arduino framework, env `cardputer-adv`).
-- Every push to `main` makes GitHub Actions build and publish a release with `AirPlay.bin`.
-  The Cardputer installs it from the Launcher (M5Launcher) favorite pointing at
-  `releases/latest/download/AirPlay.bin`, so a broken build on `main` reaches the device. Make sure
-  `pio run` succeeds before pushing to `main`.
-- The app is installed by the Launcher into its own app partition; keep the binary well under 3MB.
+- ESP32-S3, 8MB flash, **no PSRAM**: plan for roughly 150-200KB of free heap before your app's own
+  buffers. Never hold large payloads in RAM; stream them.
+- Display 240x135 (`M5Cardputer.Display`, rotation 1). Keyboard is a TCA8418 on I2C, which differs
+  from the original Cardputer: use M5Cardputer >= 1.1.1. Audio is an ES8311 driven by M5Unified
+  (`M5.Speaker`, `M5.Mic`).
+- Known-good versions: `platform = espressif32@6.9.0`, `board = m5stack-stamps3`,
+  `m5stack/M5Unified@0.2.29`, `m5stack/M5Cardputer@1.1.1`. Copy `apps/airplay/platformio.ini` for a new app.
+- Japanese text: `fonts::lgfxJapanGothicP_12` costs ~110KB of flash (efontJA_12 costs ~310KB).
+- lwIP holds only 6 datagrams per UDP socket; drain sockets from a task on core 1 (tcpip runs on core 0).
 
-## Files
+## How apps reach the device
 
-- `src/main.cpp`: Wi-Fi setup UI, screen, keys, jitter buffer and speaker output.
-- `src/raop.cpp`: RTSP/RAOP receiver, AES + ALAC decode, DMAP track info, artwork, DACP remote.
-- `src/alac.c`: ALAC decoder from shairport-sync (sample counts are bounds-checked; keep that).
-- `src/rsa_key.h`: the public AirPort Express key used by every AirPlay 1 receiver.
+- Apps are run from M5Launcher (beta build: it carries the fix that lets macOS mount the SD card in
+  USB mode). The Launcher installs a `.bin` into its app partition, from the SD card or a URL.
+- Every push to `main` builds all apps (GitHub Actions) and publishes one release with
+  `<custom_release_name>.bin` per app. Each app is a Launcher favorite pointing at
+  `https://github.com/umaniel/cardputer-apps/releases/latest/download/<Name>.bin`.
+  So whatever is on `main` ships to the device: run `pio run -d apps/<name>` and make it pass first.
+- New app: create `apps/<name>/` with `platformio.ini` (set `custom_release_name`) and `src/`.
+  The workflow picks it up automatically.
 
-## Constraints learned the hard way
+## Rules
 
-- Free heap at runtime is ~130KB. Never buffer large payloads: artwork JPEGs from iOS are ~180KB and
-  are decoded straight off the socket into a sprite. Bodies over 4KB are read and dropped.
-- lwIP keeps only 6 datagrams per UDP socket. The audio task runs on core 1 and drains the socket each
-  wakeup; on core 0 the tcpip task overflows that queue and audio packets are lost.
-- Audio is played on arrival, not at the sender's timestamp (no 2s buffer fits in RAM), so video audio
-  runs ~2s early. Clock drift is absorbed by resampling chunks by a few samples, not by dropping packets.
-- Lost packets are replaced by silence to keep timing.
-- Serial logs `[raop]`, `[ring]`, `[art]`, `[dacp]` lines every 2s or per event; use them to diagnose.
+- This repository is public. Never commit Wi-Fi passwords, tokens or personal data; apps ask for
+  Wi-Fi credentials on the device and keep them in NVS (`Preferences`).
+- Implement exactly what is asked. Suggest extra features as a question instead of adding them.
 
-## Keys
+## Device quirks worth knowing
 
-`;`/`.` volume, `,`/`/` previous/next track, Enter play/pause, `w` forget Wi-Fi.
-
-## Working style
-
-Implement exactly what is asked. Suggest extra features as a question instead of adding them.
+- The Launcher boot screen appears only on a real power-on (or deep-sleep wake). Enter opens the
+  Launcher; any other key fast-boots the installed app.
+- After using the Launcher's USB SD mode, USB serial stays gone until a real power cycle with USB
+  unplugged.
+- Most firmware in the Launcher's OTA catalogue targets the original Cardputer; its keyboard is dead
+  on the ADV.
