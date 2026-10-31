@@ -1,0 +1,37 @@
+name: build
+
+# Every push to main publishes a release whose AirPlay.bin is what
+# https://github.com/<owner>/<repo>/releases/latest/download/AirPlay.bin points to
+# (the link registered as a Launcher favorite on the Cardputer).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            .pio/libdeps
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - run: pip install platformio==6.2.0
+      - run: pio run
+      - run: cp .pio/build/cardputer-adv/firmware.bin AirPlay.bin
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Build ${{ github.run_number }}
+          body: ${{ github.event.head_commit.message }}
+          files: AirPlay.bin
+          make_latest: true
