@@ -24,7 +24,11 @@ App-specific notes live in `apps/<name>/CLAUDE.md`.
   `https://github.com/umaniel/cardputer-apps/releases/latest/download/<Name>.bin`.
   So whatever is on `main` ships to the device: run `pio run -d apps/<name>` and make it pass first.
 - New app: create `apps/<name>/` with `platformio.ini` (set `custom_release_name`) and `src/`.
-  The workflow picks it up automatically.
+  The workflow picks it up automatically and lists it in the release's `apps.json`; running the
+  Sync app (`apps/sync`) on the device then adds it to the Launcher favorites. No manual
+  favorite editing is needed.
+- Apps that need Wi-Fi share one set of credentials in NVS namespace `airplay` (keys `ssid`,
+  `pass`), entered through the setup screen in `apps/airplay` / `apps/sync`.
 
 ## Rules
 

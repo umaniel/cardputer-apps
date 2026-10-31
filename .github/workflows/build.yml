@@ -30,18 +30,26 @@ jobs:
       - name: Build all apps
         run: |
           mkdir -p dist
+          names=()
           for ini in apps/*/platformio.ini; do
             dir=$(dirname "$ini")
             name=$(sed -n 's/^custom_release_name *= *//p' "$ini")
             name=${name:-$(basename "$dir")}
             pio run -d "$dir"
             cp "$dir"/.pio/build/*/firmware.bin "dist/$name.bin"
+            names+=("\"$name\"")
           done
+          # The Sync app reads this list and turns each name into a Launcher favorite.
+          # Names only: Sync builds the download URLs itself from this repository.
+          (IFS=,; echo "[${names[*]}]") > dist/apps.json
+          cat dist/apps.json
           ls -l dist
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: Build ${{ github.run_number }}
           body: ${{ github.event.head_commit.message }}
-          files: dist/*.bin
+          files: |
+            dist/*.bin
+            dist/apps.json
           make_latest: true
