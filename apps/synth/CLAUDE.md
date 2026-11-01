@@ -17,10 +17,11 @@ Build: `pio run -d apps/synth`.
 
 ## Keys
 
-Notes use a tracker layout: `z s x d c v g b h n j m` is one octave (C to B), `q 2 w 3 e r 5 t 6 y 7 u`
-the octave above, then `i 9 o 0 p`.
+Notes use the GarageBand "Musical Typing" layout: the home row `a s d f g h j k l` is the white keys
+(C up to the next D) and `w e`, `t y u`, `o p` above it are the black keys.
 
-- Global: Tab switches PLAY/SEQ, Space starts/stops the sequence, `-`/`=` octave, `[`/`]` BPM.
-- PLAY: `;`/`.` (up/down) volume, `,`/`/` (left/right) waveform.
+- Global: Tab switches PLAY/SEQ, Space starts/stops the sequence, `z`/`x` octave, `-`/`=` volume,
+  `[`/`]` BPM.
+- PLAY: `1`-`4` pick the waveform (kept off the frequently used keys on purpose).
 - SEQ: arrows move the cursor (up/down track, left/right step), a note key writes the note and
   advances, Del clears the step and advances.
